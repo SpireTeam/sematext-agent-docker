@@ -1,24 +1,34 @@
 #!/bin/sh
 set -e
+export APP_ROOT=${APP_ROOT:-/usr/src/app}
+# check docker secrets volume 
+export CONFIG_FILE=${CONFIG_FILE:-/run/secrets/sematext-agent}
+set -o allexport
+if [ -f "$CONFIG_FILE" ]
+then
+  echo "Reading configuration from file: ${CONFIG_FILE}"
+  source $CONFIG_FILE
+fi
+
 export SPM_LOG_LEVEL=${SPM_LOG_LEVEL:-error}
 export SPM_LOG_TO_CONSOLE=${SPM_LOG_TO_CONSOLE:-true}
 export SPM_RECEIVER_URL=${SPM_URL:-$SPM_RECEIVER_URL}
 export ENABLE_LOGSENE_STATS=${ENABLE_LOGSENE_STATS:-false}
-export spmagent_spmSenderBulkInsertUrl=${SPM_RECEIVER_URL:-https://spm-receiver.sematext.com:443/receiver/v1/_bulk}
+export SPM_RECEIVER_URL=${SPM_RECEIVER_URL:-https://spm-receiver.sematext.com:443/receiver/v1/_bulk}
 export DOCKER_PORT=${DOCKER_PORT:-2375}
 export LOGSENE_TMP_DIR=/logsene-log-buffer
 export MAX_CLIENT_SOCKETS=${MAX_CLIENT_SOCKETS:-1}
+export LOGSENE_ENABLED_DEFAULT=${LOGSENE_ENABLED_DEFAULT:-true}
 
+export ENABLE_AUTODETECT_SEVERITY=${ENABLE_AUTODETECT_SEVERITY:-true}
 # default is /tmp/ but this consumes 70 MB RAM
 # to speed up GeoIP lookups the directory could be set back to /tmp/
-export MAXMIND_DB_DIR=${MAXMIND_DB_DIR:-/usr/src/app/}
+export MAXMIND_DB_DIR=${MAXMIND_DB_DIR:-$APP_ROOT}
 export SPM_COLLECTION_INTERVAL_IN_MS=${SPM_COLLECTION_INTERVAL_IN_MS:-10000}
 export SPM_TRANSMIT_INTERVAL_IN_MS=${SPM_TRANSMIT_INTERVAL_IN_MS:-10000}
 
 if [ -n "${PATTERNS_URL}" ]; then
-  echo downloading logagent patterns: ${PATTERNS_URL}
-  export LOGAGENT_PATTERNS=$(curl -s ${PATTERNS_URL})
-  # echo "$LOGAGENT_PATTERNS"
+  mkdir -p /etc/logagent
 fi
 
 if [ -n "${LOGAGENT_PATTERNS}" ]; then
@@ -56,6 +66,12 @@ if [ -n "${HOSTNAME_LOOKUP_URL}" ]; then
   export SPM_REPORTED_HOSTNAME=$(curl -s $HOSTNAME_LOOKUP_URL)
   echo "Hostname lookup from ${HOSTNAME_LOOKUP_URL}: ${SPM_REPORTED_HOSTNAME}"
 fi
+
+mkdir -p /opt/spm
+echo "docker_id=$(echo $(docker-info ID))" > /opt/spm/.docker
+echo "docker_hostname=${SPM_REPORTED_HOSTNAME}" >> /opt/spm/.docker
+cat /opt/spm/.docker
+chmod 555 /opt/spm/.docker
 
 echo $(env)
 exec sematext-agent-docker ${SPM_TOKEN}
